@@ -124,6 +124,11 @@ func ValidOSes() []string {
 	return append(make([]string, 0, len(validOSes)), validOSes...)
 }
 
+// BaseDirectoryPath returns the base directory path
+func (a *Astilectron) BaseDirectoryPath() string {
+	return a.paths.BaseDirectory()
+}
+
 // SetProvisioner sets the provisioner
 func (a *Astilectron) SetProvisioner(p Provisioner) *Astilectron {
 	a.provisioner = p

@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"os"
 	"path/filepath"
 
 	"github.com/asticode/go-astilectron"
@@ -18,37 +17,14 @@ func Run(o Options) (err error) {
 	defer a.Close()
 	a.HandleSignals()
 
-	// Adapt astilectron
-	if o.AdaptAstilectron != nil {
-		o.AdaptAstilectron(a)
-	}
-
-	// Base directory path default to executable path
-	if o.BaseDirectoryPath == "" {
-		if o.BaseDirectoryPath, err = os.Executable(); err != nil {
-			return errors.Wrap(err, "getting executable path failed")
-		}
-		o.BaseDirectoryPath = filepath.Dir(o.BaseDirectoryPath)
-	}
-
 	// Provision
-	if err = provision(o.BaseDirectoryPath, o.RestoreAssets, o.CustomProvision); err != nil {
+	if err = provision(a.BaseDirectoryPath(), o.RestoreAssets, o.CustomProvision); err != nil {
 		return errors.Wrap(err, "provisioning failed")
 	}
 
 	// Start
 	if err = a.Start(); err != nil {
 		return errors.Wrap(err, "starting astilectron failed")
-	}
-
-	// Serve or handle messages
-	var url string
-	if o.MessageHandler == nil {
-		var ln = serve(o.BaseDirectoryPath, o.AdaptRouter, o.TemplateData)
-		defer ln.Close()
-		url = "http://" + ln.Addr().String() + o.Homepage
-	} else {
-		url = filepath.Join(o.BaseDirectoryPath, "resources", "app", o.Homepage)
 	}
 
 	// Debug
@@ -58,19 +34,12 @@ func Run(o Options) (err error) {
 
 	// Init window
 	var w *astilectron.Window
-	if w, err = a.NewWindow(url, o.WindowOptions); err != nil {
+	if w, err = a.NewWindow(filepath.Join(a.BaseDirectoryPath(), "resources", "app", o.Homepage), o.WindowOptions); err != nil {
 		return errors.Wrap(err, "new window failed")
 	}
 
-	// Adapt window
-	if o.AdaptWindow != nil {
-		o.AdaptWindow(w)
-	}
-
 	// Handle messages
-	if o.MessageHandler != nil {
-		w.On(astilectron.EventNameWindowEventMessage, handleMessages(w, o.MessageHandler))
-	}
+	w.On(astilectron.EventNameWindowEventMessage, handleMessages(w, o.MessageHandler))
 
 	// Create window
 	if err = w.Create(); err != nil {
@@ -84,9 +53,44 @@ func Run(o Options) (err error) {
 		}
 	}
 
+	// Menu
+	var m *astilectron.Menu
+	if len(o.MenuOptions) > 0 {
+		// Init menu
+		m = a.NewMenu(o.MenuOptions)
+
+		// Create menu
+		if err = m.Create(); err != nil {
+			return errors.Wrap(err, "creating menu failed")
+		}
+	}
+
+	// Tray
+	var t *astilectron.Tray
+	if o.TrayOptions != nil {
+		// Init tray
+		t = a.NewTray(o.TrayOptions)
+
+		// Tray menu
+		if len(o.TrayMenuOptions) > 0 {
+			// Init menu
+			var m = t.NewMenu(o.TrayMenuOptions)
+
+			// Create menu
+			if err = m.Create(); err != nil {
+				return errors.Wrap(err, "creating tray menu failed")
+			}
+		}
+
+		// Create tray
+		if err = t.Create(); err != nil {
+			return errors.Wrap(err, "creating tray failed")
+		}
+	}
+
 	// On wait
 	if o.OnWait != nil {
-		if err = o.OnWait(a, w); err != nil {
+		if err = o.OnWait(a, w, m, t); err != nil {
 			return errors.Wrap(err, "onwait failed")
 		}
 	}
